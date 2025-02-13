@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Classic Space Invaders</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            background-color: #000;
+            background-image: 
+                radial-gradient(white, rgba(255,255,255,.2) 2px, transparent 40px),
+                radial-gradient(white, rgba(255,255,255,.15) 1px, transparent 30px),
+                radial-gradient(white, rgba(255,255,255,.1) 2px, transparent 40px);
+            background-size: 550px 550px, 350px 350px, 250px 250px;
+            background-position: 0 0, 40px 60px, 130px 270px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Press Start 2P', cursive;
+            overflow: hidden;
+        }
+
+        canvas {
+            border: 4px solid #0f0;
+            border-radius: 10px;
+            box-shadow: 0 0 20px #0f0,
+                       inset 0 0 20px #0f0;
+        }
+
+        #gameContainer {
+            position: relative;
+        }
+
+        #score {
+            color: #0f0;
+            position: absolute;
+            top: -40px;
+            width: 100%;
+            text-align: center;
+            font-size: 20px;
+            text-shadow: 0 0 10px #0f0;
+            animation: glow 1.5s ease-in-out infinite alternate;
+        }
+
+        #startButton {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px 40px;
+            font-size: 24px;
+            background-color: transparent;
+            color: #0f0;
+            border: 3px solid #0f0;
+            cursor: pointer;
+            font-family: 'Press Start 2P', cursive;
+            text-transform: uppercase;
+            transition: all 0.3s;
+            box-shadow: 0 0 10px #0f0;
+            text-shadow: 0 0 5px #0f0;
+        }
+
+        #startButton:hover {
+            background-color: #0f0;
+            color: #000;
+            transform: translate(-50%, -50%) scale(1.1);
+            box-shadow: 0 0 30px #0f0;
+        }
+
+        @keyframes glow {
+            from { text-shadow: 0 0 5px #0f0, 0 0 10px #0f0, 0 0 15px #0f0; }
+            to { text-shadow: 0 0 10px #0f0, 0 0 20px #0f0, 0 0 30px #0f0; }
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="score">Score: <span id="scoreValue">0</span></div>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <button id="startButton">Start Mission</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('scoreValue');
+        const startButton = document.getElementById('startButton');
+        let gameRunning = false;
+
+        // Load game sprites
+        const enemySprite = new Image();
+        enemySprite.src = 'https://raw.githubusercontent.com/lukechilds/space-invaders/master/invader.png';
+        
+        const playerSprite = new Image();
+        playerSprite.src = 'https://raw.githubusercontent.com/lukechilds/space-invaders/master/player.png';
+
+        const player = {
+            x: canvas.width / 2,
+            y: canvas.height - 50,
+            width: 50,
+            height: 30,
+            speed: 6
+        };
+
+        const bullets = [];
+        const enemies = [];
+        const enemyRows = 5;
+        const enemyCols = 8;
+        let score = 0;
+
+        function initGame() {
+            enemies.length = 0;
+            bullets.length = 0;
+            score = 0;
+            scoreElement.textContent = '0';
+            player.x = canvas.width / 2;
+
+            for (let i = 0; i < enemyRows; i++) {
+                for (let j = 0; j < enemyCols; j++) {
+                    enemies.push({
+                        x: j * 80 + 60,
+                        y: i * 50 + 50,
+                        width: 40,
+                        height: 30,
+                        direction: 1
+                    });
+                }
+            }
+        }
+
+        const keys = new Set();
+        
+        window.addEventListener('keydown', (e) => {
+            keys.add(e.key);
+            if (e.key === ' ') {
+                e.preventDefault();
+                if (gameRunning && bullets.length < 3) {
+                    bullets.push({
+                        x: player.x + player.width / 2,
+                        y: player.y,
+                        width: 3,
+                        height: 15,
+                        speed: 8
+                    });
+                }
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys.delete(e.key);
+        });
+
+        startButton.addEventListener('click', () => {
+            gameRunning = true;
+            startButton.style.display = 'none';
+            initGame();
+        });
+
+        function update() {
+            if (!gameRunning) return;
+
+            if (keys.has('ArrowLeft') && player.x > 0) {
+                player.x -= player.speed;
+            }
+            if (keys.has('ArrowRight') && player.x < canvas.width - player.width) {
+                player.x += player.speed;
+            }
+
+            bullets.forEach((bullet, bulletIndex) => {
+                bullet.y -= bullet.speed;
+                
+                if (bullet.y < 0) {
+                    bullets.splice(bulletIndex, 1);
+                }
+
+                enemies.forEach((enemy, enemyIndex) => {
+                    if (collision(bullet, enemy)) {
+                        bullets.splice(bulletIndex, 1);
+                        enemies.splice(enemyIndex, 1);
+                        score += 100;
+                        scoreElement.textContent = score;
+                    }
+                });
+            });
+
+            let touchedEdge = false;
+            enemies.forEach(enemy => {
+                enemy.x += enemy.direction * 2;
+                if (enemy.x <= 0 || enemy.x >= canvas.width - enemy.width) {
+                    touchedEdge = true;
+                }
+                
+                if (enemy.y + enemy.height >= player.y) {
+                    gameOver();
+                }
+            });
+
+            if (touchedEdge) {
+                enemies.forEach(enemy => {
+                    enemy.direction *= -1;
+                    enemy.y += 20;
+                });
+            }
+
+            if (enemies.length === 0) {
+                victory();
+            }
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            startButton.style.display = 'block';
+            startButton.textContent = 'GAME OVER - TRY AGAIN';
+        }
+
+        function victory() {
+            gameRunning = false;
+            startButton.style.display = 'block';
+            startButton.textContent = 'VICTORY! PLAY AGAIN';
+        }
+
+        function collision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        function draw() {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw player sprite
+            ctx.drawImage(playerSprite, player.x, player.y, player.width, player.height);
+
+            // Draw bullets
+            ctx.fillStyle = '#fff';
+            bullets.forEach(bullet => {
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            });
+
+            // Draw enemy sprites
+            enemies.forEach(enemy => {
+                ctx.drawImage(enemySprite, enemy.x, enemy.y, enemy.width, enemy.height);
+            });
+
+            // Scanlines effect
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            for(let i = 0; i < canvas.height; i += 4) {
+                ctx.fillRect(0, i, canvas.width, 2);
+            }
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>
